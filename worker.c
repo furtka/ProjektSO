@@ -7,123 +7,126 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "hive_ipc.h"
+#include "logger.h"
+
 #define STATE_ENTERING 0
 #define STATE_INSIDE 1
 #define STATE_LEAVING 2
 #define STATE_OUTSIDE 3
 
-#define GATES_NUMBER 1
-
-#define ENTER_REQUEST_TYPE 1
-#define LEAVE_REQUEST_TYPE 2
-#define enter_confirmation_type(gate_id) (3 + gate_id)
-#define leave_confirmation_type(gate_id) (3 + GATES_NUMBER + gate_id)
-#define allow_use_gate_type(bee_id) (3 + 2 * GATES_NUMBER + bee_id)
-
-int gate_message_queue;
-
-// TODO: this should be either 0 or 1 depending on the starting location of the
-//       bee. It should be set based on the command line arguments.
+// TOOD: allow to stear this from the command line argument
+int current_state = STATE_OUTSIDE;
 int been_inside_counter = 0;
 
-// TODO: this should be set based on the command line arguments.
-int life_span = 10;
+int life_span;
+int bee_id;
+int bee_time_in_hive;
+int bee_time_outside_hive;
 
-// TODO: this should be set based on the command line argunment
-int current_state = STATE_OUTSIDE;
+char *log_tag;
 
-// TODO: this should be set based on the command line argunment
-int bee_id = 54;
-
-typedef struct
+char* create_log_tag()
 {
-    /**
-     * type = 1: request to enter
-     * type = 2: request to leave
-     * type = 3 + gate_id: confirmation of entering by the gate_id gate
-     * type = 3 + gate_number + gate_id: confirmation of leaving by the gate_id gate
-     */
-    long type;
+    char *tag = (char *)malloc(11);
+    if (bee_id > 99999) {
+        bee_id = 99999;
+    }
+    sprintf(tag, "BEE %d", bee_id);
+    return tag;
+}
 
-    /**
-     * either bee_id or gate_id depending on the type
-     * if type = 1 or 2, then data is bee_id
-     * if type = 3 or 4, then data is gate_id
-     */
-    int data;
-} message;
+void parse_command_line_arguments(int argc, char *argv[])
+{
+    if (argc != 5)
+    {
+        printf("Usage: %s <bee_id> <life_span> <bee_time_in_hive> <bee_time_outside_hive>\n", argv[0]);
+        exit(1);
+    }
+
+    bee_id = atoi(argv[1]);
+    life_span = atoi(argv[2]);
+    bee_time_in_hive = atoi(argv[3]);
+    bee_time_outside_hive = atoi(argv[4]);
+
+    log_tag = create_log_tag();
+}
+
+void enter_hive()
+{
+    if (request_enter(bee_id) == FAILURE)
+    {
+        log(LOG_LEVEL_ERROR, log_tag, "error requesting enter");
+        exit(1);
+    }
+
+    int gate_id = await_use_gate_allowance(bee_id);
+    if (gate_id < 0)
+    {
+        log(LOG_LEVEL_ERROR, log_tag, "error awaiting use gate allowance");
+        exit(2);
+    }
+    current_state = STATE_ENTERING;
+    log(LOG_LEVEL_INFO, log_tag, "Bee is entering through gate %d", gate_id);
+
+    if (send_enter_confirmation(gate_id) == FAILURE)
+    {
+        log(LOG_LEVEL_ERROR, log_tag, "error sending enter confirmation");
+        exit(3);
+    }
+    current_state = STATE_INSIDE;
+    log(LOG_LEVEL_INFO, log_tag, "Bee is inside", bee_id);
+}
+
+void leave_hive()
+{
+    if (request_leave(bee_id) == FAILURE)
+    {
+        log(LOG_LEVEL_ERROR, log_tag, "error requesting leave");
+        exit(4);
+    }
+
+    int gate_id = await_use_gate_allowance(bee_id);
+    if (gate_id < 0)
+    {
+        log(LOG_LEVEL_ERROR, log_tag, "error awaiting use gate allowance to leave");
+        exit(5);
+    }
+    log(LOG_LEVEL_INFO, log_tag, "Bee is leaving through gate %d", gate_id);
+
+    current_state = STATE_LEAVING;
+
+    if (send_leave_confirmation(gate_id) == FAILURE)
+    {
+        log(LOG_LEVEL_ERROR, log_tag, "error sending leave confirmation");
+        exit(6);
+    }
+    current_state = STATE_OUTSIDE;
+    log(LOG_LEVEL_INFO, log_tag, "Bee is outside");
+
+    sleep(bee_time_outside_hive);
+}
+
+void bee_lifecycle()
+{
+    enter_hive();
+    sleep(bee_time_in_hive);
+    leave_hive();
+    sleep(bee_time_outside_hive);
+}
 
 int main(int argc, char *argv[])
 {
-    key_t key = ftok("worker.c", 65);
-    gate_message_queue = msgget(key, 0666 | IPC_CREAT);
-
-    sleep(1);
+    parse_command_line_arguments(argc, argv);
+    initialize_gate_message_queue();
 
     for (been_inside_counter = 0; been_inside_counter < life_span; been_inside_counter++)
     {
-        printf("attempting to send request to enter\n");
-        message bee_request_in = {ENTER_REQUEST_TYPE, bee_id};
-        if (msgsnd(gate_message_queue, &bee_request_in, sizeof(int), 0) == -1)
-        {
-            printf("error sending enter request\n");
-            return 1;
-        }
-
-        printf("attempting to receive allowance to enter\n");
-        message allowance;
-        if (msgrcv(gate_message_queue, &allowance, sizeof(int), allow_use_gate_type(bee_id), 0) == -1)
-        {
-            printf("error receiving allowance\n");
-            return 1;
-        }
-        int gate_id = allowance.data;
-        current_state = STATE_ENTERING;
-        printf("Bee %d is entering the gate %d\n", bee_id, gate_id);
-
-        message bee_confirmation_in_message = {enter_confirmation_type(gate_id), 0};
-        if (msgsnd(gate_message_queue, &bee_confirmation_in_message, sizeof(int), 0) == -1)
-        {
-            printf("error sending enter confirmation\n");
-            return 1;
-        }
-        current_state = STATE_INSIDE;
-        printf("Bee %d is inside\n", bee_id);
-
-        sleep(rand() % 10); // TODO: this should be read from the command line arguments
-
-        printf("attempting to send request to leave\n");
-        message bee_request_out = {LEAVE_REQUEST_TYPE, bee_id};
-        if (msgsnd(gate_message_queue, &bee_request_out, sizeof(int), 0) == -1)
-        {
-            printf("error sending leave request\n");
-            return 1;
-        }
-
-        printf("attempting to receive allowance to leave\n");
-        message bee_allow_out_message;
-        if (msgrcv(gate_message_queue, &bee_allow_out_message, sizeof(int), allow_use_gate_type(bee_id), 0) == -1)
-        {
-            printf("error receiving allowance\n");
-            return 1;
-        }
-        gate_id = bee_allow_out_message.data;
-        current_state = STATE_LEAVING;
-        printf("Bee %d is leaving the gate %d\n", bee_id, gate_id);
-
-        message bee_confirmation_out_message = {leave_confirmation_type(gate_id), 0};
-        if (msgsnd(gate_message_queue, &bee_confirmation_out_message, sizeof(int), 0) == -1)
-        {
-            printf("error sending leave confirmation\n");
-            return 1;
-        }
-        current_state = STATE_OUTSIDE;
-        printf("Bee %d is outside\n", bee_id);
-
-        sleep(rand() % 10); // TODO: this should be read from the command line arguments
+        bee_lifecycle();
     }
 
-    printf("bee %d is dead\n", bee_id);
-
+    log(LOG_LEVEL_INFO, log_tag, "Bee is dead");
+    printf("asdf");
+    exit(0);
     return 0;
 }

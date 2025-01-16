@@ -8,43 +8,17 @@
 #include <dispatch/dispatch.h>
 #include <stdio.h>
 
-#define microseconds_to_milliseconds(x) (x * 1000)
-#define with_fuzz(x) (x + (rand() % x))
+#include "logger.h"
+#include "hive_ipc.h"
 
-#define ENTER_REQUEST_TYPE 1
-#define LEAVE_REQUEST_TYPE 2
-#define enter_confirmation_type(gate_id) (3 + gate_id)
-#define leave_confirmation_type(gate_id) (3 + GATES_NUMBER + gate_id)
-#define allow_use_gate_type(bee_id) (3 + 2 * GATES_NUMBER + bee_id)
+void cleanup_resources();
+void handle_sigint(int);
+void register_signal_handlers();
+void initialize_gate_synchronization_mechanisms();
+void cleanup_synchronization_mechanisms();
+void initialize_gate_threads();
+void join_gate_threads();
 
-#define GATES_NUMBER 2
-
-int gate_message_queue;
-
-void handle_sigint(int sig) {
-    printf("\nCaught Ctrl+C (SIGINT signal). Performing cleanup...\n");
-    cleanup_resources();
-    printf("Resources cleaned up. Exiting program.\n");
-    exit(0);
-}
-
-typedef struct
-{
-    /**
-     * type = 1: request to enter
-     * type = 2: request to leave
-     * type = 3 + gate_id: confirmation of entering by the gate_id gate
-     * type = 3 + gate_number + gate_id: confirmation of leaving by the gate_id gate
-     * type = 3 + 2 * GATES_NUMBER + bee_id: confirmation of allowing the bee_id to use the gate
-     */
-    long type;
-
-    /**
-     * either bee_id or gate_id depending on the type
-     * if type = 1 or 2, then data is bee_id
-     */
-    int data;
-} message;
 
 pthread_mutex_t bees_inside_counter_mutex = PTHREAD_MUTEX_INITIALIZER;
 dispatch_semaphore_t bees_inside_counter_semaphore;
@@ -68,9 +42,8 @@ void *gate_leave_thread(void *arg)
     while (1)
     {
 
-        printf("Gate %d: waiting for leave request\n", gate_id);
-        message bee_request_out;
-        if (msgrcv(gate_message_queue, &bee_request_out, sizeof(int), LEAVE_REQUEST_TYPE, 0) == -1)
+        int bee_id = await_bee_request_leave();
+        if (bee_id < 0)
         {
             cleanup_resources();
             exit(1);
@@ -78,26 +51,21 @@ void *gate_leave_thread(void *arg)
 
         pthread_mutex_lock(&gates_mutex[gate_id]);
 
-        printf("Gate %d: received leave request from bee %d\n", gate_id, bee_request_out.data);
-        int bee_id = bee_request_out.data;
-        message bee_allow_out_message = {allow_use_gate_type(bee_id), 0};
-        if (msgsnd(gate_message_queue, &bee_allow_out_message, sizeof(int), 0) == -1)
+        if (send_bee_allow_leave_message(bee_id, gate_id) == FAILURE)
         {
             cleanup_resources();
             exit(2);
         }
 
-        printf("Gate %d: allowed bee %d to leave\n", gate_id, bee_id);
-        message bee_confirmation_out_message;
-        if (msgrcv(gate_message_queue, &bee_confirmation_out_message, sizeof(int), leave_confirmation_type(gate_id), 0) == -1)
+        if (await_bee_leave_confirmation(gate_id) == FAILURE)
         {
             cleanup_resources();
             exit(3);
         }
 
-        printf("Gate %d: bee %d left\n", gate_id, bee_id);
         pthread_mutex_lock(&bees_inside_counter_mutex);
         bees_inside_counter--;
+        log(LOG_LEVEL_DEBUG, "HIVE", "Bees inside: %d", bees_inside_counter);
         pthread_mutex_unlock(&bees_inside_counter_mutex);
 
         dispatch_semaphore_signal(bees_inside_counter_semaphore);
@@ -115,38 +83,32 @@ void *gate_enter_thread(void *args)
 
     while (1)
     {
-        message bee_request_in;
-        printf("Gate %d: waiting for enter request\n", gate_id);
+        log(LOG_LEVEL_DEBUG, "HIVE", "Waiting for bees to enter the hive for semaphore");
         dispatch_semaphore_wait(bees_inside_counter_semaphore, DISPATCH_TIME_FOREVER);
-        printf("Gate %d: waiting for enter request after semapthore\n", gate_id);
-        if (msgrcv(gate_message_queue, &bee_request_in, sizeof(int), ENTER_REQUEST_TYPE, 0) == -1)
+        int bee_id = await_bee_request_enter();
+        if (bee_id < 0)
+        {
+            cleanup_resources();
+            exit(1);
+        }
+
+        pthread_mutex_lock(&gates_mutex[gate_id]);
+
+        if (send_bee_allow_enter_message(bee_id, gate_id) == FAILURE)
         {
             cleanup_resources();
             exit(4);
         }
 
-        pthread_mutex_lock(&gates_mutex[gate_id]);
-
-        int bee_id = bee_request_in.data;
-        printf("Gate %d: received enter request from bee %d\n", gate_id, bee_id);
-        message bee_allow_in_message = {allow_use_gate_type(bee_id), gate_id};
-        if (msgsnd(gate_message_queue, &bee_allow_in_message, sizeof(int), 0) == -1)
+        if (await_bee_enter_confirmation(gate_id) == FAILURE)
         {
             cleanup_resources();
             exit(5);
         }
 
-        printf("Gate %d: allowed bee %d to enter\n", gate_id, bee_id);
-        message bee_confirmation_in_message;
-        if (msgrcv(gate_message_queue, &bee_confirmation_in_message, sizeof(int), enter_confirmation_type(gate_id), 0) == -1)
-        {
-            cleanup_resources();
-            exit(6);
-        }
-
-        printf("Gate %d: bee %d entered\n", gate_id, bee_id);
         pthread_mutex_lock(&bees_inside_counter_mutex);
         bees_inside_counter++;
+        log(LOG_LEVEL_DEBUG, "HIVE", "Bees inside: %d", bees_inside_counter);
         pthread_mutex_unlock(&bees_inside_counter_mutex);
 
         pthread_mutex_unlock(&gates_mutex[gate_id]);
@@ -155,10 +117,16 @@ void *gate_enter_thread(void *args)
     return NULL;
 }
 
-void initialize_gate_message_queue()
-{
-    key_t key = ftok("worker.c", 65);
-    gate_message_queue = msgget(key, 0666 | IPC_CREAT);
+void cleanup_resources() {
+    cleanup_gate_message_queue();
+    cleanup_synchronization_mechanisms();
+}
+
+void handle_sigint(int singal) {
+    log(LOG_LEVEL_DEBUG, "HIVE", "Caught (SIGINT signal %d). Performing cleanup...", singal);
+    cleanup_resources();
+    log(LOG_LEVEL_DEBUG, "HIVE", "Resources cleaned up. Exiting program.");
+    exit(0);
 }
 
 void register_signal_handlers()
@@ -179,11 +147,6 @@ void cleanup_synchronization_mechanisms() {
     {
         pthread_mutex_destroy(&gates_mutex[i]);
     }
-}
-
-void cleanup_resources() {
-    msgctl(gate_message_queue, IPC_RMID, NULL);
-    cleanup_synchronization_mechanisms();
 }
 
 void initialize_gate_threads()
