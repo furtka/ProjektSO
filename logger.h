@@ -7,7 +7,6 @@
 #define LOG_LEVEL_INFO 2
 #define LOG_LEVEL_DEBUG 3
 
-
 /**
  * Logs a message with the given tag and message. 
  * Also accepts infinite number of arguments to be formatted into the message.

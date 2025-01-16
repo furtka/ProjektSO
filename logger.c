@@ -7,24 +7,57 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <time.h>
 
+char* format_string(const char* format, ...) {
+    if (!format) {
+        return NULL;
+    }
 
+    va_list args;
+    va_start(args, format);
 
-void log(int level, char *tag, char *message, ...)
+    size_t size = vsnprintf(NULL, 0, format, args) + 1; 
+
+    va_end(args);
+
+    char* result = (char*)malloc(size);
+    if (!result) {
+        return NULL; 
+    }
+
+    va_start(args, format);
+    vsnprintf(result, size, format, args);
+    va_end(args);
+
+    return result; 
+}
+
+void log(int level, char *tag, char *format, ...)
 {
-    // if (is_log_level(level))
-    // {
-        va_list args;
-        va_start(args, message);
+    if (!format) {
+        return ;
+    }
 
-        printf("[%s] ", tag);
-        fflush(stdout);
-        vprintf(message, args);
-        printf("\n");
-        fflush(stdout);
+    va_list args;
+    va_start(args, format);
 
-        va_end(args);
+    size_t size = vsnprintf(NULL, 0, format, args) + 1; 
 
+    va_end(args);
 
-    // }
+    char* result = (char*)malloc(size);
+    if (!result) {
+        return ; 
+    }
+
+    va_start(args, format);
+    vsnprintf(result, size, format, args);
+    va_end(args);
+
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+
+    printf("[%ld.%ld] [%s]: %s\n", ts.tv_sec, ts.tv_nsec, tag, result);
+    free(result);
 }

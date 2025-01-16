@@ -57,3 +57,12 @@ w przypadku zmiany stanu na "na zewnątrz" lub "w środku" proces pszczoly "zasy
 # Program Queen
 
 
+
+# TODO
+[ ] implement queen and making new bees!
+[ ] rename worker to bee
+[ ] start bees from hive process according to the config
+[ ] send sigint to all children on sigint form hive
+[ ] wait for all bees to die and finish the hive simulation gracefully
+
+

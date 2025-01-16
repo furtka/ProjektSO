@@ -126,7 +126,5 @@ int main(int argc, char *argv[])
     }
 
     log(LOG_LEVEL_INFO, log_tag, "Bee is dead");
-    printf("asdf");
-    exit(0);
     return 0;
 }

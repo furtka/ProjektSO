@@ -17,17 +17,16 @@
 typedef struct
 {
     /**
-     * type = 1: request to enter
-     * type = 2: request to leave
-     * type = 3 + gate_id: confirmation of entering by the gate_id gate
-     * type = 3 + gate_number + gate_id: confirmation of leaving by the gate_id gate
-     * type = 3 + 2 * GATES_NUMBER + bee_id: confirmation of allowing the bee_id to use the gate
+     * REQUEST TO ENTER   = 1
+     * REQUEST TO LEAVE   = 2
+     * CONFIRMATION ENTER = gate_id + 3
+     * CONFIRMATION LEAVE = gate_id + 3 + GATE_NUMBER
+     * ALLOW USE GATE     = bee_id + 3 + 2 * GATES_NUMBER
      */
     long type;
 
     /**
-     * either bee_id or gate_id depending on the type
-     * if type = 1 or 2, then data is bee_id
+     * Either bee_id or gate_id depending on context
      */
     int data;
 } message;
@@ -36,7 +35,7 @@ int gate_message_queue;
 
 void initialize_gate_message_queue()
 {
-    log(LOG_LEVEL_DEBUG, "HIVE_IPC", "Initializizing gate message q");
+    log(LOG_LEVEL_DEBUG, "HIVE_IPC", "Initializizing gate message queue");
 
     key_t key = ftok("worker.c", 65);
     gate_message_queue = msgget(key, 0666 | IPC_CREAT);
