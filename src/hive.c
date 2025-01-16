@@ -142,6 +142,7 @@ void cleanup_resources()
     {
         kill(pids[i], SIGINT);
     }
+
     close_logger();
 }
 
@@ -149,7 +150,6 @@ void handle_sigint(int singal)
 {
     log(LOG_LEVEL_DEBUG, "HIVE", "Caught (SIGINT signal %d). Performing cleanup...", singal);
     cleanup_resources();
-    log(LOG_LEVEL_DEBUG, "HIVE", "Resources cleaned up. Exiting program.");
     exit(0);
 }
 

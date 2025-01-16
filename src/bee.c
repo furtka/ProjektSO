@@ -30,6 +30,7 @@ char *logs_directory;
 
 char *create_log_tag()
 {
+    // FIXME: the length of the tag might be too short
     char *tag = (char *)malloc(11);
     if (bee_id > 99999)
     {
@@ -119,8 +120,22 @@ void bee_lifecycle()
     sleep(bee_time_outside_hive);
 }
 
+void cleanup_resources() 
+{
+    close_logger();
+    free(log_tag);
+}
+
+void handle_sigint(int singal)
+{
+    log(LOG_LEVEL_DEBUG, log_tag, "Caught (SIGINT signal %d). Performing cleanup...", singal);
+    cleanup_resources();
+    exit(0);
+}
+
 int main(int argc, char *argv[])
 {
+    signal(SIGINT, handle_sigint);
     parse_command_line_arguments(argc, argv);
     init_logger(logs_directory, log_tag);
     initialize_gate_message_queue();
@@ -131,6 +146,6 @@ int main(int argc, char *argv[])
     }
 
     log(LOG_LEVEL_INFO, log_tag, "Bee is dead");
-    close_logger();
+    cleanup_resources();
     return 0;
 }
