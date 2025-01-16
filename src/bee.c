@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "hive_ipc.h"
 #include "logger.h"
@@ -25,22 +26,24 @@ int bee_time_in_hive;
 int bee_time_outside_hive;
 
 char *log_tag;
+char *logs_directory;
 
-char* create_log_tag()
+char *create_log_tag()
 {
     char *tag = (char *)malloc(11);
-    if (bee_id > 99999) {
+    if (bee_id > 99999)
+    {
         bee_id = 99999;
     }
-    sprintf(tag, "BEE %d", bee_id);
+    sprintf(tag, "BEE_%d", bee_id);
     return tag;
 }
 
 void parse_command_line_arguments(int argc, char *argv[])
 {
-    if (argc != 5)
+    if (argc != 6)
     {
-        printf("Usage: %s <bee_id> <life_span> <bee_time_in_hive> <bee_time_outside_hive>\n", argv[0]);
+        printf("Usage: %s <bee_id> <life_span> <bee_time_in_hive> <bee_time_outside_hive> <logs_directory>\n", argv[0]);
         exit(1);
     }
 
@@ -48,6 +51,7 @@ void parse_command_line_arguments(int argc, char *argv[])
     life_span = atoi(argv[2]);
     bee_time_in_hive = atoi(argv[3]);
     bee_time_outside_hive = atoi(argv[4]);
+    logs_directory = argv[5];
 
     log_tag = create_log_tag();
 }
@@ -118,6 +122,7 @@ void bee_lifecycle()
 int main(int argc, char *argv[])
 {
     parse_command_line_arguments(argc, argv);
+    init_logger(logs_directory, log_tag);
     initialize_gate_message_queue();
 
     for (been_inside_counter = 0; been_inside_counter < life_span; been_inside_counter++)
@@ -126,5 +131,6 @@ int main(int argc, char *argv[])
     }
 
     log(LOG_LEVEL_INFO, log_tag, "Bee is dead");
+    close_logger();
     return 0;
 }

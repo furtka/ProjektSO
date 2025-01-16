@@ -8,13 +8,15 @@
 #include <dispatch/dispatch.h>
 #include <stdio.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 #include "logger.h"
 #include "hive_ipc.h"
 
 int max_bees_capacity;
-char *bees_config_filepath;
+char* bees_config_filepath;
 int* pids;
+char* logs_directory;
 
 void cleanup_resources();
 void handle_sigint(int);
@@ -140,6 +142,7 @@ void cleanup_resources()
     {
         kill(pids[i], SIGINT);
     }
+    close_logger();
 }
 
 void handle_sigint(int singal)
@@ -193,12 +196,13 @@ void join_gate_threads()
 
 void parse_command_line_arguments(int argc, char *argv[])
 {
-    if (argc != 2)
+    if (argc != 3)
     {
-        fprintf(stderr, "Usage: %s <bees_config_file>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <bees_config_file> <logs_directory>\n", argv[0]);
         exit(1);
     }
     bees_config_filepath = argv[1];
+    logs_directory = argv[2];
 }
 
 /**
@@ -236,7 +240,7 @@ hive_config read_config_file()
 
     int new_bee_interval = 0;
     int number_of_bees = 0;
-    fscanf(config_file, "%d %d %d", &max_bees_capacity, &number_of_bees, &new_bee_interval);
+    fscanf(config_file, "%d %d %d", &number_of_bees, &max_bees_capacity, &new_bee_interval);
 
     int *bee_time_in_hive = (int *)malloc(number_of_bees * sizeof(int));
     int *bee_life_spans = (int *)malloc(number_of_bees * sizeof(int));
@@ -282,14 +286,13 @@ int *launch_bee_processes(hive_config config)
         if (pid == 0)
         {
             char *id = (char *)malloc(6);
-            sprintf(id, "%d", bee.id);
+            sprintf(id, "%d", bee.id + 1);
             char *life_span = (char *)malloc(6);
             sprintf(life_span, "%d", bee.life_span);
             char *time_in_hive = (char *)malloc(6);
             sprintf(time_in_hive, "%d", bee.time_in_hive);
 
-            // FIXME(furtak): bee binary might be in a different location
-            execl("./bin/bee", "./bin/bee", id, life_span, time_in_hive, time_in_hive, NULL);
+            execl("./bin/bee", "./bin/bee", id, life_span, time_in_hive, time_in_hive, logs_directory, NULL);
             printf("Error launching bee process\n");
             exit(1);
         }
@@ -304,6 +307,7 @@ int *launch_bee_processes(hive_config config)
 int main(int argc, char *argv[])
 {
     parse_command_line_arguments(argc, argv);
+    init_logger(logs_directory, "hive");
     hive_config config = read_config_file();
     pids = launch_bee_processes(config);
 
@@ -316,7 +320,6 @@ int main(int argc, char *argv[])
     {
         waitpid(pids[i], NULL, 0);
     }
-
     cleanup_resources();
     return 0;
 }

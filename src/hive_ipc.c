@@ -39,13 +39,22 @@ void initialize_gate_message_queue()
 
     key_t key = ftok("worker.c", 65);
     gate_message_queue = msgget(key, 0666 | IPC_CREAT);
+    if (gate_message_queue == -1)
+    {
+        log(LOG_LEVEL_ERROR, "HIVE_IPC", "Error creating gate message queue");
+        exit(1);
+    }
 }
 
 void cleanup_gate_message_queue()
 {
     log(LOG_LEVEL_DEBUG, "HIVE_IPC", "Cleaning up gate message queue");
 
-    msgctl(gate_message_queue, IPC_RMID, NULL);
+    if (msgctl(gate_message_queue, IPC_RMID, NULL) == -1)
+    {
+        log(LOG_LEVEL_ERROR, "HIVE_IPC", "Error removing gate message queue");
+        exit(1);
+    }
 }
 
 int await_bee_request_leave()
