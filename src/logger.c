@@ -9,30 +9,6 @@
 #include <stdarg.h>
 #include <time.h>
 
-char* format_string(const char* format, ...) {
-    if (!format) {
-        return NULL;
-    }
-
-    va_list args;
-    va_start(args, format);
-
-    size_t size = vsnprintf(NULL, 0, format, args) + 1; 
-
-    va_end(args);
-
-    char* result = (char*)malloc(size);
-    if (!result) {
-        return NULL; 
-    }
-
-    va_start(args, format);
-    vsnprintf(result, size, format, args);
-    va_end(args);
-
-    return result; 
-}
-
 void log(int level, char *tag, char *format, ...)
 {
     if (!format) {
