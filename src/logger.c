@@ -65,6 +65,7 @@ void log(int level, char *tag, char *format, ...)
     if (log_file != NULL)
     {
         fprintf(log_file, "[%ld.%ld] [%s]: %s\n", ts.tv_sec, ts.tv_nsec, tag, result);
+        fflush(log_file);
     }
     else 
     {
