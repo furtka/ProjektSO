@@ -95,7 +95,7 @@ void write_log(LogMessage *log_message)
     }
     sem_post(read_semaphore);
     sem_post(write_semaphore);
- }
+}
 
 LogMessage *read_log()
 {   
@@ -114,7 +114,6 @@ LogMessage *read_log()
 
 void deallocate_client()
 {
-    printf("DEALOCATING client\n");
     sem_close(write_semaphore);
     sem_close(read_semaphore);
     sem_close(write_semaphore_full);
@@ -125,7 +124,6 @@ void deallocate_client()
 
 void deallocate_server() 
 {
-    printf("DEALOCATING server\n");
     sem_unlink(SEMAPHORE_WRITE);
     sem_unlink(SEMAPHORE_READ);
     sem_unlink(WRITE_SEMAPHORE_FULL);

@@ -23,24 +23,32 @@ void handle_sigint(int sig)
 
 int main()
 {
+    struct timespec ts;
     allocate();
     signal(SIGINT, handle_sigint);
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    printf("[%ld.%ld] LOG_SERVER Server started\n", ts.tv_sec, ts.tv_nsec);
 
     while (!sigint)
     {
         LogMessage *log_message = read_log();
 
         printf(
-            "[%d.%d] [%s] %s\n",
+            "[%ld.%ld] %-10s [PID=%d] %s\n",
             log_message->log_timestamp_s,
             log_message->log_timestamp_ns,
             log_message->log_tag,
+            log_message->pid,
             log_message->log_message);
 
         free(log_message);
     }
 
-    printf("dealocating!!!\n");
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    printf("[%ld.%ld] LOG_SERVER Exiting...\n", ts.tv_sec, ts.tv_nsec);
+
     deallocate_server();
 
     return 0;

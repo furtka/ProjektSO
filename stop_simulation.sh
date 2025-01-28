@@ -9,12 +9,12 @@ else
     echo "Found ./bin/worker processes with PIDs: $PIDS"
     echo "Sending SIGINT to all ./bin/worker processes"
     for PID in $PIDS; do
-        echo "Sending SIGINT to PID: $PID"
-        kill -SIGINT "$PID"
+        echo "Sending SIGKILL to PID: $PID"
+        kill -SIGKILL "$PID"
         if [ $? -eq 0 ]; then
-            echo "Successfully sent SIGINT to PID: $PID"
+            echo "Successfully sent SIGKILL to PID: $PID"
         else
-            echo "Failed to send SIGINT to PID: $PID"
+            echo "Failed to send SIGKILL to PID: $PID"
         fi
     done
 fi
@@ -26,12 +26,12 @@ if [ -z "$PIDS" ]; then
 else
     echo "Found ./bin/hive processes with PIDs: $PIDS"
     for PID in $PIDS; do
-        echo "Sending SIGINT to PID: $PID"
-        kill -SIGINT "$PID"
+        echo "Sending SIGKILL to PID: $PID"
+        kill -SIGKILL "$PID"
         if [ $? -eq 0 ]; then
-            echo "Successfully sent SIGINT to PID: $PID"
+            echo "Successfully sent SIGKILL to PID: $PID"
         else
-            echo "Failed to send SIGINT to PID: $PID"
+            echo "Failed to send SIGKILL to PID: $PID"
         fi
     done
 fi

@@ -56,11 +56,9 @@ w przypadku zmiany stanu na "na zewnątrz" lub "w środku" proces pszczoly "zasy
 
 # Program Queen
 
-
 # TODO
 [ ] implement queen and making new bees!
 [ ] better error handling everywhere1
-[ ] another ipc technique applied
 [ ] implement beekeeper
 [ ] handle seamphores the linux way
 [ ] validate input

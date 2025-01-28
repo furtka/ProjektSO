@@ -6,6 +6,7 @@ typedef struct {
     int log_timestamp_s;
     int log_timestamp_ns;
     int log_level;
+    int pid;
     char log_tag[MAX_TAG_SIZE + 1];
     char log_message[MAX_LOG_MESSAGE_SIZE + 1];
 } LogMessage;
@@ -23,4 +24,4 @@ LogMessage* read_log();
 
 void deallocate_client();
 
-void deallocate_server();  
+void deallocate_server();

@@ -20,11 +20,11 @@
 void init_logger() 
 {
     allocate();
+    log(LOG_LEVEL_INFO, "LOGGER", "initialized");
 }
 
 void log(int level, char *tag, char *message, ...) 
 {
-    printf("BEGIN LOGGING\n");
     va_list args;
     va_start(args, message);
     char buffer[MAX_LOG_MESSAGE_SIZE + 1];
@@ -46,16 +46,17 @@ void log(int level, char *tag, char *message, ...)
     log_message.log_timestamp_s = ts.tv_sec;
     log_message.log_timestamp_ns = ts.tv_nsec;
     log_message.log_level = level;
+    log_message.pid = getpid();
     strcpy(log_message.log_tag, tag_copy);
     strcpy(log_message.log_message, buffer);
 
     write_log(&log_message);
 
     free(tag_copy);
-    printf("END LOGGING\n");
 }
 
 void close_logger() 
 {
+    log(LOG_LEVEL_INFO, "LOGGER", "closing");
     deallocate_client();
 }

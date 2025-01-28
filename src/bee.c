@@ -16,7 +16,6 @@
 #define STATE_LEAVING 2
 #define STATE_OUTSIDE 3
 
-// TOOD: allow to stear this from the command line argument
 int current_state = STATE_OUTSIDE;
 int been_inside_counter = 0;
 
@@ -30,12 +29,7 @@ char *logs_directory;
 
 char *create_log_tag()
 {
-    // FIXME: the length of the tag might be too short
-    char *tag = (char *)malloc(11);
-    if (bee_id > 99999)
-    {
-        bee_id = 99999;
-    }
+    char *tag = (char *)malloc(15);
     sprintf(tag, "BEE_%d", bee_id);
     return tag;
 }
