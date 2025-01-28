@@ -1,5 +1,5 @@
 #include "hive_ipc.h"
-#include "logger.h"
+#include "logger/logger.h"
 
 #include <sys/types.h>
 #include <sys/ipc.h>

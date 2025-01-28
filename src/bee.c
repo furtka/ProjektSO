@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "hive_ipc.h"
-#include "logger.h"
+#include "logger/logger.h"
 
 #define STATE_ENTERING 0
 #define STATE_INSIDE 1
@@ -72,7 +72,7 @@ RESULT enter_hive()
 RESULT leave_hive()
 {
     handle_failure(request_leave(bee_id));
-    handle_result_as(gate_id, await_bee_leave_confirmation(bee_id));
+    handle_result_as(gate_id, await_use_gate_allowance(bee_id));
     log(LOG_LEVEL_INFO, log_tag, "Bee is leaving through gate %d", gate_id);
     current_state = STATE_LEAVING;
     handle_failure(send_leave_confirmation(gate_id));
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
 {
     signal(SIGINT, handle_sigint);
     parse_command_line_arguments(argc, argv);
-    init_logger(logs_directory, log_tag);
+    init_logger();
     initialize_gate_message_queue();
 
     RESULT bee_lifecycle_result = SUCCESS;

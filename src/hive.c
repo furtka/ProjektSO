@@ -10,12 +10,13 @@
 #include <signal.h>
 #include <sys/stat.h>
 
-#include "logger.h"
+#include "logger/logger.h"
 #include "hive_ipc.h"
 
 int max_bees_capacity;
 char *bees_config_filepath;
-int *pids;
+pid_t *pids;
+// pid_t pid_logger_server;
 char *logs_directory;
 
 void cleanup_resources();
@@ -26,6 +27,22 @@ void cleanup_synchronization_mechanisms();
 void initialize_gate_threads();
 void join_gate_threads();
 void propagate_sigint_to_children();
+
+void start_logger_server()
+{
+    // pid_logger_server = fork();
+    // if (pid_logger_server == 0)
+    // {
+    //     execl("./bin/logger_server", "./bin/logger_server", logs_directory, NULL);
+    //     log(LOG_LEVEL_ERROR, "HIVE", "Error launching logger server, exiting...");
+    //     exit(1);
+    // }
+}
+
+void close_logger_server()
+{
+    // kill(pid_logger_server, SIGINT);
+}
 
 pthread_mutex_t bees_inside_counter_mutex = PTHREAD_MUTEX_INITIALIZER;
 dispatch_semaphore_t bees_inside_counter_semaphore;
@@ -141,6 +158,7 @@ void cleanup_resources()
     cleanup_gate_message_queue();
     cleanup_synchronization_mechanisms();
     close_logger();
+    // close_logger_server();
 }
 
 /**
@@ -358,8 +376,12 @@ void wait_for_children_processes()
 
 int main(int argc, char *argv[])
 {
+    printf("Hive started\n");
+    start_logger_server();
+    init_logger();
+    log(LOG_LEVEL_INFO, "HIVE", "Starting hive");
+
     parse_command_line_arguments(argc, argv);
-    init_logger(logs_directory, "hive");
     hive_config config = read_config_file();
     pids = launch_bee_processes(config);
 

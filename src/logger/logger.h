@@ -8,13 +8,9 @@
 #define LOG_LEVEL_DEBUG 3
 
 /**
- * Set the output file for the logger to the given file in the given directory.
- * 
- * @param logs_directory Directory where the log file will be stored. 
- *        Must be directory in the current working directory.
- * @param log_file File name of the log file.
+ * Connects the logger client to serer.
  */
-void init_logger(char* logs_directory, char* log_file);
+void init_logger();
 
 /**
  * Logs a message with the given tag and message. 
@@ -27,7 +23,7 @@ void init_logger(char* logs_directory, char* log_file);
 void log(int level, char *tag, char *message, ...);
 
 /**
- * Closes the logger file.
+ * Cleans up the logger for the client process.
  */
 void close_logger();
 
