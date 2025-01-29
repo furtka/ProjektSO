@@ -84,7 +84,6 @@ void allocate()
 
 void write_log(LogMessage *log_message)
 {
-    printf("writing log\n");
     sem_wait(write_semaphore_full);
     sem_wait(write_semaphore);
     LogMessage* write_pointer = ((char*)header + ((Header*)header)->write);
@@ -96,12 +95,10 @@ void write_log(LogMessage *log_message)
     }
     sem_post(read_semaphore);
     sem_post(write_semaphore);
-    printf("written log\n");
 }
 
 LogMessage *read_log()
 {   
-    printf("Reading log\n");
     sem_wait(read_semaphore);
     LogMessage *log_message = malloc(sizeof(LogMessage));
     LogMessage* read_pointer = ((char*)header + ((Header*)header)->read);
@@ -112,7 +109,6 @@ LogMessage *read_log()
         ((Header*)header)->read = sizeof(Header);
     }
     sem_post(write_semaphore_full);
-    printf("Read log\n");
     return log_message;
 }
 

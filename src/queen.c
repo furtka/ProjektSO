@@ -58,7 +58,7 @@ RESULT queen_lifecycle()
     log(LOG_LEVEL_INFO, "QUEEN", "Queen lifecycle started, next bee id = %d", next_bee_id);
     sleep(new_bee_interval);
     log(LOG_LEVEL_INFO, "QUEEN", "Requesting new bee");
-    handle_failure(request_queen_bee_born());
+    handle_failure(request_queen_give_birth());
     log(LOG_LEVEL_INFO, "QUEEN", "Awaiting new bee allowance");
     handle_failure(await_queen_birth_allowance());
     log(LOG_LEVEL_INFO, "QUEEN", "Sending new bee confirmation");

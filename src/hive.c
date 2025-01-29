@@ -152,7 +152,7 @@ RESULT handle_queen_birth_request()
     bees_inside_counter++;
     log(LOG_LEVEL_DEBUG, "HIVE", "Bees inside: %d, counter is incremented after birth", bees_inside_counter);
     pthread_mutex_unlock(&bees_inside_counter_mutex);
-    
+
     return SUCCESS;
 }
 
@@ -208,8 +208,8 @@ void cleanup_resources()
     cleanup_gate_message_queue();
     cleanup_synchronization_mechanisms();
     close_logger();
-    // free_vector(children_processes);
-    // free(children_processes);
+    free_vector(children_processes);
+    free(children_processes);
 }
 
 /**
@@ -217,14 +217,13 @@ void cleanup_resources()
  */
 void propagate_sigint_to_children()
 {
-    printf("propagate sigint");
     for (int i = 0; i < children_processes->used; i++)
     {
-        printf("propagate signal to i=%d %d\n", i, get(children_processes, i));
         kill(get(children_processes, i), SIGINT);
     }
 }
 
+volatile sig_atomic_t sigint = 0;
 /**
  * Handles the SIGINT by propagating it to all child processes.
  *
@@ -234,7 +233,8 @@ void propagate_sigint_to_children()
  */
 void handle_sigint(int singal)
 {
-
+    sigint = 1;
+    propagate_sigint_to_children();
 }
 
 void register_signal_handlers()
@@ -285,13 +285,12 @@ void join_gate_threads()
 
 void parse_command_line_arguments(int argc, char *argv[])
 {
-    if (argc != 3)
+    if (argc != 2)
     {
-        fprintf(stderr, "Usage: %s <bees_config_file> <logs_directory>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <bees_config_file>\n", argv[0]);
         exit(1);
     }
     bees_config_filepath = argv[1];
-    logs_directory = argv[2];
 }
 
 /**
@@ -317,7 +316,7 @@ typedef struct
 } hive_config;
 
 /**
- * TODO: Add error handling
+ * TODO: Add input verification
  *
  * Reads the configuration file and returns the hive configuration.
  *
@@ -425,7 +424,6 @@ void launch_queen_process(int new_bee_interval, int next_bee_id)
         sprintf(next_bee_id_str, "%d", next_bee_id);
 
         execl("./bin/queen", "./bin/queen", new_bee_interval_str, next_bee_id_str, NULL);
-        perror("dupa");
         log(LOG_LEVEL_ERROR, "HIVE", "Error launching queen process, exiting...");
         propagate_sigint_to_children();
         cleanup_resources();
@@ -447,12 +445,12 @@ void wait_for_children_processes()
 
 int main(int argc, char *argv[])
 {
-     children_processes = malloc(sizeof(vector));
-     init_vector(children_processes, 10);
-     init_logger();
-     log(LOG_LEVEL_INFO, "HIVE", "Starting hive");
-     parse_command_line_arguments(argc, argv);
-     hive_config config = read_config_file();
+    children_processes = malloc(sizeof(vector));
+    init_vector(children_processes, 10);
+    init_logger();
+    log(LOG_LEVEL_INFO, "HIVE", "Starting hive");
+    parse_command_line_arguments(argc, argv);
+    hive_config config = read_config_file();
     launch_bee_processes(config);
     launch_queen_process(config.new_bee_interval, config.number_of_bees + 10);
 
@@ -461,6 +459,11 @@ int main(int argc, char *argv[])
     initialize_gate_synchronization_mechanisms();
     initialize_gate_threads();
     initialize_queen_handle_thread();
+
+    while (!sigint)
+    {
+        sleep(1);
+    }
 
     wait_for_children_processes();
     cleanup_resources();

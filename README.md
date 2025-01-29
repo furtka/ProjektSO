@@ -57,13 +57,12 @@ w przypadku zmiany stanu na "na zewnątrz" lub "w środku" proces pszczoly "zasy
 
 
 # TODO
-[ ] implement queen and making new bees!
-[ ] better error handling everywhere1
 [ ] implement beekeeper
-[ ] handle seamphores the linux way
 [ ] validate input
 [ ] document the project
 
-## Optional
-[ ] handle the compiler warning generated in the logger
-[ ] handle log level
+- test cases
+   - just run the hive and do ctrl+c
+   - run hive and remove the message queue
+   - run hive without sleeps
+   - add and remove frames

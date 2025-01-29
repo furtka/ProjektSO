@@ -199,7 +199,7 @@ int await_queen_birth_confirmation();
  * @return SUCCESS if the message was successfully sent,
  *         FAILURE otherwise. See RESULT values for details.
  */
-RESULT request_queen_bee_born();
+RESULT request_queen_give_birth();
 
 /**
  * Awaits for a message from the hive by queen process that it is allowed to give birth.
