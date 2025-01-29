@@ -13,10 +13,45 @@
 #include "logger/logger.h"
 #include "hive_ipc.h"
 
+typedef struct
+{
+    int *array;
+    size_t used;
+    size_t size;
+} vector;
+
+void init_vector(vector *v, size_t init_size)
+{
+    v->array = malloc(init_size * sizeof(int));
+    v->used = 0;
+    v->size = init_size;
+}
+
+void push_back(vector *v, int new_element)
+{
+    if (v->used == v->size)
+    {
+        v->size *= 2;
+        v->array = realloc(v->array, v->size * sizeof(int));
+    }
+    v->array[v->used++] = new_element;
+}
+
+void free_vector(vector *v)
+{
+    free(v->array);
+    v->array = NULL;
+    v->used = v->size = 0;
+}
+
+int get(vector *v, int index)
+{
+    return v->array[index];
+}
+
 int max_bees_capacity;
 char *bees_config_filepath;
-pid_t *pids;
-pid_t pid_logger_server;
+vector *children_processes;
 char *logs_directory;
 
 void cleanup_resources();
@@ -27,22 +62,6 @@ void cleanup_synchronization_mechanisms();
 void initialize_gate_threads();
 void join_gate_threads();
 void propagate_sigint_to_children();
-
-void start_logger_server()
-{
-    pid_logger_server = fork();
-    if (pid_logger_server == 0)
-    {
-        execl("./bin/logger_server", "./bin/logger_server", logs_directory, NULL);
-        log(LOG_LEVEL_ERROR, "HIVE", "Error launching logger server, exiting...");
-        exit(1);
-    }
-}
-
-void close_logger_server()
-{
-    kill(pid_logger_server, SIGINT);
-}
 
 pthread_mutex_t bees_inside_counter_mutex = PTHREAD_MUTEX_INITIALIZER;
 dispatch_semaphore_t bees_inside_counter_semaphore;
@@ -57,6 +76,7 @@ typedef struct gate_thread_args
 
 pthread_t gate_enter_threads[GATES_NUMBER];
 pthread_t gate_leave_threads[GATES_NUMBER];
+pthread_t queen_handle_thread;
 gate_thread_args gate_args[GATES_NUMBER];
 
 RESULT handle_gate_leave_request(int gate_id)
@@ -114,6 +134,28 @@ RESULT handle_gate_enter_request(int gate_id)
     return SUCCESS;
 }
 
+RESULT handle_queen_birth_request()
+{
+    log(LOG_LEVEL_INFO, "HIVE", "Awaiting queen birth request");
+    handle_failure(await_queen_birth_request());
+
+    log(LOG_LEVEL_INFO, "HIVE", "Waiting for semaphore for handle queen birth request");
+    dispatch_semaphore_wait(bees_inside_counter_semaphore, DISPATCH_TIME_FOREVER);
+    log(LOG_LEVEL_INFO, "HIVE", "Sending queen birth allowance");
+    handle_failure(send_queen_birth_allowance());
+
+    log(LOG_LEVEL_INFO, "HIVE", "Waiting for queen birth confirmation");
+    handle_result_as(new_bee_pid, await_queen_birth_confirmation());
+
+    push_back(children_processes, new_bee_pid);
+    pthread_mutex_lock(&bees_inside_counter_mutex);
+    bees_inside_counter++;
+    log(LOG_LEVEL_DEBUG, "HIVE", "Bees inside: %d, counter is incremented after birth", bees_inside_counter);
+    pthread_mutex_unlock(&bees_inside_counter_mutex);
+    
+    return SUCCESS;
+}
+
 void *gate_leave_thread(void *arg)
 {
     gate_thread_args *args = (gate_thread_args *)arg;
@@ -124,9 +166,6 @@ void *gate_leave_thread(void *arg)
     if (result == FAILURE)
     {
         log(LOG_LEVEL_ERROR, "HIVE", "Error handling gate leave request");
-        propagate_sigint_to_children();
-        cleanup_resources();
-        exit(1);
     }
 
     return NULL;
@@ -144,9 +183,20 @@ void *gate_enter_thread(void *args)
     if (result == FAILURE)
     {
         log(LOG_LEVEL_ERROR, "HIVE", "Error handling gate enter request");
-        propagate_sigint_to_children();
-        cleanup_resources();
-        exit(1);
+    }
+
+    return NULL;
+}
+
+void *queen_handle_thread_function(void *args)
+{
+    RESULT result;
+    while ((result = handle_queen_birth_request()) == SUCCESS)
+        ;
+
+    if (result == FAILURE)
+    {
+        log(LOG_LEVEL_ERROR, "HIVE", "Error handling queen birth request");
     }
 
     return NULL;
@@ -158,7 +208,8 @@ void cleanup_resources()
     cleanup_gate_message_queue();
     cleanup_synchronization_mechanisms();
     close_logger();
-    close_logger_server();
+    // free_vector(children_processes);
+    // free(children_processes);
 }
 
 /**
@@ -166,9 +217,11 @@ void cleanup_resources()
  */
 void propagate_sigint_to_children()
 {
-    for (int i = 0; pids[i] != 0; i++)
+    printf("propagate sigint");
+    for (int i = 0; i < children_processes->used; i++)
     {
-        kill(pids[i], SIGINT);
+        printf("propagate signal to i=%d %d\n", i, get(children_processes, i));
+        kill(get(children_processes, i), SIGINT);
     }
 }
 
@@ -181,10 +234,7 @@ void propagate_sigint_to_children()
  */
 void handle_sigint(int singal)
 {
-    if (signal == SIGINT)
-    {
-        propagate_sigint_to_children();
-    }
+
 }
 
 void register_signal_handlers()
@@ -217,6 +267,11 @@ void initialize_gate_threads()
         pthread_create(&gate_enter_threads[i], NULL, gate_enter_thread, &gate_args[i]);
         pthread_create(&gate_leave_threads[i], NULL, gate_leave_thread, &gate_args[i]);
     }
+}
+
+void initialize_queen_handle_thread()
+{
+    pthread_create(&queen_handle_thread, NULL, queen_handle_thread_function, NULL);
 }
 
 void join_gate_threads()
@@ -332,13 +387,9 @@ hive_config read_config_file()
  * Launches the bee processes and returns the pids of the processes.
  *
  * @param config - config of the hive
- *
- * @return pointer to array with the pids of the processes ended with 0 as
- *         the indication of the end of the array.
  */
-int *launch_bee_processes(hive_config config)
+void launch_bee_processes(hive_config config)
 {
-    int *bee_pids = (int *)malloc(config.number_of_bees * sizeof(int) + 1);
     for (int i = 0; i < config.number_of_bees; i++)
     {
         bee_config bee = config.bees[i];
@@ -352,42 +403,64 @@ int *launch_bee_processes(hive_config config)
             char *time_in_hive = (char *)malloc(6);
             sprintf(time_in_hive, "%d", bee.time_in_hive);
 
-            execl("./bin/bee", "./bin/bee", id, life_span, time_in_hive, time_in_hive, logs_directory, NULL);
+            execl("./bin/bee", "./bin/bee", id, life_span, time_in_hive, time_in_hive, "0", NULL);
             log(LOG_LEVEL_ERROR, "HIVE", "Error launching bee process, exiting...");
             propagate_sigint_to_children();
             cleanup_resources();
             exit(1);
         }
-        bee_pids[i] = pid;
+        push_back(children_processes, pid);
     }
+}
 
-    bee_pids[config.number_of_bees] = 0;
+void launch_queen_process(int new_bee_interval, int next_bee_id)
+{
+    int pid = fork();
+    push_back(children_processes, pid);
+    if (pid == 0)
+    {
+        char *new_bee_interval_str = (char *)malloc(12);
+        sprintf(new_bee_interval_str, "%d", new_bee_interval);
+        char *next_bee_id_str = (char *)malloc(12);
+        sprintf(next_bee_id_str, "%d", next_bee_id);
 
-    return bee_pids;
+        execl("./bin/queen", "./bin/queen", new_bee_interval_str, next_bee_id_str, NULL);
+        perror("dupa");
+        log(LOG_LEVEL_ERROR, "HIVE", "Error launching queen process, exiting...");
+        propagate_sigint_to_children();
+        cleanup_resources();
+        exit(1);
+    }
+    push_back(children_processes, pid);
 }
 
 void wait_for_children_processes()
 {
-    for (int i = 0; pids[i] != 0; i++)
+    printf("waiting for children\n");
+    printf("children_processes->used: %d\n", children_processes->used);
+    for (int i = 0; i < children_processes->used; i++)
     {
-        waitpid(pids[i], NULL, 0);
+        printf("waiting for index: child_processes[%d] = %d on %d\n", i, get(children_processes, i), children_processes->used);
+        waitpid(get(children_processes, i), NULL, 0);
     }
 }
 
 int main(int argc, char *argv[])
 {
-    start_logger_server();
-    init_logger();
-    log(LOG_LEVEL_INFO, "HIVE", "Starting hive");
-
-    parse_command_line_arguments(argc, argv);
-    hive_config config = read_config_file();
-    pids = launch_bee_processes(config);
+     children_processes = malloc(sizeof(vector));
+     init_vector(children_processes, 10);
+     init_logger();
+     log(LOG_LEVEL_INFO, "HIVE", "Starting hive");
+     parse_command_line_arguments(argc, argv);
+     hive_config config = read_config_file();
+    launch_bee_processes(config);
+    launch_queen_process(config.new_bee_interval, config.number_of_bees + 10);
 
     register_signal_handlers();
     initialize_gate_message_queue();
     initialize_gate_synchronization_mechanisms();
     initialize_gate_threads();
+    initialize_queen_handle_thread();
 
     wait_for_children_processes();
     cleanup_resources();

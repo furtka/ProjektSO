@@ -12,9 +12,12 @@
 
 #define ENTER_REQUEST_TYPE 1
 #define LEAVE_REQUEST_TYPE 2
-#define enter_confirmation_type(gate_id) (3 + gate_id)
-#define leave_confirmation_type(gate_id) (3 + GATES_NUMBER + gate_id)
-#define allow_use_gate_type(bee_id) (3 + 2 * GATES_NUMBER + bee_id)
+#define QUEEN_BEE_BIRTH_REQUEST_TYPE 3
+#define QUEEN_BEE_BIRTH_ALLOWANCE_TYPE 4
+#define QUEEN_BEE_BIRTH_CONFIRMATION_TYPE 5
+#define enter_confirmation_type(gate_id) (6 + gate_id)
+#define leave_confirmation_type(gate_id) (6 + GATES_NUMBER + gate_id)
+#define allow_use_gate_type(bee_id) (6 + 2 * GATES_NUMBER + bee_id)
 
 #define handle_msg_error(result)                                                       \
     if (result == -1)                                                                  \
@@ -105,7 +108,7 @@ RESULT send_bee_allow_leave_message(int bee_id, int gate_id)
     message bee_allow_leave_message = {allow_use_gate_type(bee_id), gate_id};
 
     handle_msg_error(
-        msgsnd(gate_message_queue, &bee_allow_leave_message, sizeof(int), 0));
+        msgsnd(gate_message_queue, &bee_allow_leave_message, sizeof(int), IPC_NOWAIT));
 
     return SUCCESS;
 }
@@ -117,7 +120,7 @@ RESULT send_bee_allow_enter_message(int bee_id, int gate_id)
     message bee_allow_enter_message = {allow_use_gate_type(bee_id), gate_id};
 
     handle_msg_error(
-        msgsnd(gate_message_queue, &bee_allow_enter_message, sizeof(int), 0))
+        msgsnd(gate_message_queue, &bee_allow_enter_message, sizeof(int), IPC_NOWAIT))
 
         return SUCCESS;
 }
@@ -153,7 +156,7 @@ RESULT request_enter(int bee_id)
     message bee_request_in = {ENTER_REQUEST_TYPE, bee_id};
 
     handle_msg_error(
-        msgsnd(gate_message_queue, &bee_request_in, sizeof(int), 0));
+        msgsnd(gate_message_queue, &bee_request_in, sizeof(int), IPC_NOWAIT));
 
     return SUCCESS;
 }
@@ -177,7 +180,7 @@ RESULT send_enter_confirmation(int gate_id)
     message bee_confirmation_in_message = {enter_confirmation_type(gate_id), 0};
 
     handle_msg_error(
-        msgsnd(gate_message_queue, &bee_confirmation_in_message, sizeof(int), 0));
+        msgsnd(gate_message_queue, &bee_confirmation_in_message, sizeof(int), IPC_NOWAIT));
 
     return SUCCESS;
 }
@@ -189,7 +192,7 @@ RESULT request_leave(int bee_id)
     message bee_request_out = {LEAVE_REQUEST_TYPE, bee_id};
 
     handle_msg_error(
-        msgsnd(gate_message_queue, &bee_request_out, sizeof(int), 0));
+        msgsnd(gate_message_queue, &bee_request_out, sizeof(int), IPC_NOWAIT));
 
     return SUCCESS;
 }
@@ -201,7 +204,79 @@ RESULT send_leave_confirmation(int gate_id)
     message bee_confirmation_out_message = {leave_confirmation_type(gate_id), 0};
 
     handle_msg_error(
-        msgsnd(gate_message_queue, &bee_confirmation_out_message, sizeof(int), 0));
+        msgsnd(gate_message_queue, &bee_confirmation_out_message, sizeof(int), IPC_NOWAIT));
+
+    return SUCCESS;
+}
+
+RESULT await_queen_birth_request()
+{
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Waiting for queen birth request");
+
+    message queen_birth_request;
+
+    handle_msg_error(
+        msgrcv(gate_message_queue, &queen_birth_request, sizeof(int), QUEEN_BEE_BIRTH_REQUEST_TYPE, 0));
+
+    return SUCCESS;
+}
+
+RESULT send_queen_birth_allowance()
+{
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Sending queen birth allowance");
+
+    message queen_birth_allowance = {QUEEN_BEE_BIRTH_ALLOWANCE_TYPE, 0};
+
+    handle_msg_error(
+        msgsnd(gate_message_queue, &queen_birth_allowance, sizeof(int), IPC_NOWAIT));
+
+    return SUCCESS;
+}
+
+int await_queen_birth_confirmation()
+{
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Waiting for queen birth confirmation");
+
+    message queen_birth_confirmation;
+
+    handle_msg_error(
+        msgrcv(gate_message_queue, &queen_birth_confirmation, sizeof(int), QUEEN_BEE_BIRTH_CONFIRMATION_TYPE, 0));
+
+    return queen_birth_confirmation.data;
+}
+
+RESULT request_queen_bee_born()
+{
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Sending request from queen to give birth");
+
+    message queen_birth_request = {QUEEN_BEE_BIRTH_REQUEST_TYPE, 0};
+
+    handle_msg_error(
+        msgsnd(gate_message_queue, &queen_birth_request, sizeof(int), IPC_NOWAIT));
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Request from queen to give birth sent");
+    return SUCCESS;
+}
+
+RESULT await_queen_birth_allowance()
+{
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Waiting for queen birth allowance");
+
+    message queen_birth_allowance;
+
+    handle_msg_error(
+        msgrcv(gate_message_queue, &queen_birth_allowance, sizeof(int), QUEEN_BEE_BIRTH_ALLOWANCE_TYPE, 0));
+
+    return SUCCESS;
+}
+
+RESULT send_queen_birth_confirmation(int pid)
+{
+    log(LOG_LEVEL_INFO, "HIVE_IPC", "Sending queen birth confirmation");
+
+    message queen_birth_confirmation = {QUEEN_BEE_BIRTH_CONFIRMATION_TYPE, pid};
+
+    handle_msg_error(
+        msgsnd(gate_message_queue, &queen_birth_confirmation, sizeof(int), IPC_NOWAIT));
 
     return SUCCESS;
 }

@@ -14,7 +14,6 @@ Napisz program pszczelarza, pszczoły “robotnicy” i królowej, tak by zasymu
 pszczół. Każda z pszczół “robotnic” umiera po pewnym określonym czasie Xi, liczonym ilością
 odwiedzin w ulu.
 
-
 # Program Hive
 ## Parametry programu:
 N - liczba pszczół
@@ -37,7 +36,7 @@ T - interwał, co jaki królowa składa jaja
 4. nasluchuje sygnałów od pszczelarza i podwaja lub zminiejsza maksymalną liczbę pszczół w ulu
 5. nasluchuje zapytan od pszczelarza o stan ula
 
-# Program Worker
+# Program bee 
 ## Stan robotnicy:
 1. OUTSIDE
 2. WAIT_IN
@@ -52,9 +51,10 @@ T - interwał, co jaki królowa składa jaja
 3. W momencie skonczenia tranzycji, wysyła komunikat o zwolnieniu
    wejścia.
 
-w przypadku zmiany stanu na "na zewnątrz" lub "w środku" proces pszczoly "zasypia" na określoną ilość czasu (T_i, rand())
+w przypadku zmiany stanu na "na zewnątrz" lub "w środku" proces pszczoly "zasypia" na określoną ilość czasu (T_i, T_i)
 
 # Program Queen
+
 
 # TODO
 [ ] implement queen and making new bees!

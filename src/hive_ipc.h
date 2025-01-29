@@ -73,7 +73,7 @@ int await_bee_request_enter();
  * @param gate_id Id of the gate that the bee is allowed to use to leave the hive.
  *
  * @return SUCCESS if the message was successfully sent,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT send_bee_allow_leave_message(int bee_id, int gate_id);
 
@@ -88,7 +88,7 @@ RESULT send_bee_allow_leave_message(int bee_id, int gate_id);
  * @param gate_id Id of the gate that the bee is allowed to use to enter the hive.
  *
  * @return SUCCESS if the message was successfully sent,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT send_bee_allow_enter_message(int bee_id, int gate_id);
 
@@ -99,7 +99,7 @@ RESULT send_bee_allow_enter_message(int bee_id, int gate_id);
  * @param gate_id Id of the gate that the bee has left through.
  *
  * @return SUCCESS if the message was successfully received,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT await_bee_leave_confirmation(int gate_id);
 
@@ -110,7 +110,7 @@ RESULT await_bee_leave_confirmation(int gate_id);
  * @param gate_id Id of the gate that the bee has entered through.
  *
  * @return SUCCESS if the message was successfully received,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT await_bee_enter_confirmation(int gate_id);
 
@@ -143,7 +143,7 @@ int await_use_gate_allowance(int bee_id);
  * @param bee_id Id of the bee that is requesting to leave the hive.
  *
  * @return SUCCESS if the message was successfully sent,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT send_enter_confirmation(int gate_id);
 
@@ -154,7 +154,7 @@ RESULT send_enter_confirmation(int gate_id);
  * @param bee_id Id of the bee that is requesting to leave the hive.
  *
  * @return SUCCESS if the message was successfully sent,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT request_leave(int bee_id);
 
@@ -164,8 +164,59 @@ RESULT request_leave(int bee_id);
  * @param gate_id Id of the gate that the bee has left through.
  *
  * @return SUCCESS if the message was successfully sent,
- *         FAILURE otherwise.
+ *         FAILURE otherwise. See RESULT values for details.
  */
 RESULT send_leave_confirmation(int gate_id);
+
+/**
+ * Awaits for a message from the queen process with give birth request.
+ * 
+ * @return SUCCESS if the message was successfully received,
+ *         FAILURE otherwise. See RESULT values for details.
+ */
+RESULT await_queen_birth_request();
+
+/**
+ * Sends a message to the queen process that it is allowed to give birth.
+ * 
+ * @return SUCCESS if the message was successfully sent,
+ *         FAILURE otherwise. See RESULT values for details.
+ */
+RESULT send_queen_birth_allowance();
+
+/**
+ * Awaits for a message from the queen process that the queen bee was born.
+ * 
+ * @return int PID of the new bee process.
+ *         Negative value if an error occurred. See RESULT values for details.
+ */
+int await_queen_birth_confirmation();
+
+/**
+ * Sends a message to the hive by queen process that with request permission
+ * to give birth.
+ * 
+ * @return SUCCESS if the message was successfully sent,
+ *         FAILURE otherwise. See RESULT values for details.
+ */
+RESULT request_queen_bee_born();
+
+/**
+ * Awaits for a message from the hive by queen process that it is allowed to give birth.
+ * 
+ * @return SUCCESS if the message was successfully received,
+ *         FAILURE otherwise. See RESULT values for details.
+ */
+RESULT await_queen_birth_allowance();
+
+/**
+ * Sends a message to the hive by queen process that the queen bee was born.
+ * 
+ * @param PID of the new bee process.
+ * 
+ * @return RESULT SUCCESS if the message was successfully sent,
+ *         FAILURE otherwise. See RESULT values for details.
+ */
+RESULT send_queen_birth_confirmation(int);
 
 #endif

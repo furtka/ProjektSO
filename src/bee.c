@@ -25,7 +25,6 @@ int bee_time_in_hive;
 int bee_time_outside_hive;
 
 char *log_tag;
-char *logs_directory;
 
 char *create_log_tag()
 {
@@ -38,7 +37,7 @@ void parse_command_line_arguments(int argc, char *argv[])
 {
     if (argc != 6)
     {
-        printf("Usage: %s <bee_id> <life_span> <bee_time_in_hive> <bee_time_outside_hive> <logs_directory>\n", argv[0]);
+        printf("Usage: %s <bee_id> <life_span> <bee_time_in_hive> <bee_time_outside_hive> <is_inside>\n", argv[0]);
         exit(1);
     }
 
@@ -46,7 +45,15 @@ void parse_command_line_arguments(int argc, char *argv[])
     life_span = atoi(argv[2]);
     bee_time_in_hive = atoi(argv[3]);
     bee_time_outside_hive = atoi(argv[4]);
-    logs_directory = argv[5];
+    int is_inside = atoi(argv[5]);
+    if (is_inside)
+    {
+        current_state = STATE_INSIDE;
+    }
+    else
+    {
+        current_state = STATE_OUTSIDE;
+    }
 
     log_tag = create_log_tag();
 }
@@ -72,15 +79,22 @@ RESULT leave_hive()
     handle_failure(send_leave_confirmation(gate_id));
     current_state = STATE_OUTSIDE;
     log(LOG_LEVEL_INFO, log_tag, "Bee is outside");
-    sleep(bee_time_outside_hive);
+    return SUCCESS;
 }
 
 RESULT bee_lifecycle()
 {
-    handle_failure(enter_hive());
+    if (current_state == STATE_OUTSIDE)
+    {
+        handle_failure(enter_hive());
+    }
     sleep(bee_time_in_hive);
-    handle_failure(leave_hive());
+    if (current_state == STATE_INSIDE)
+    {
+        handle_failure(leave_hive());
+    }
     sleep(bee_time_outside_hive);
+    return SUCCESS;
 }
 
 void cleanup_resources()
@@ -102,7 +116,6 @@ int main(int argc, char *argv[])
     parse_command_line_arguments(argc, argv);
     init_logger();
     initialize_gate_message_queue();
-
     RESULT bee_lifecycle_result = SUCCESS;
     for (
         been_inside_counter = 0;
