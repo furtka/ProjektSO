@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "logger/logger.h"
 #include "hive_ipc.h"
@@ -315,9 +316,40 @@ typedef struct
     bee_config *bees;
 } hive_config;
 
+#define REASONABLE_INPUT_MAX_NUMBER 30
+#define REASONABLE_INPUT_MIN_NUMBER 1
+
 /**
- * TODO: Add input verification
+ * Reads an integer from the file and stores it in the output parameter.
  *
+ * @param file File to read from.
+ * @param output Pointer to the integer where the read value will be stored.
+ *
+ * @return 1 if the integer was successfully read, 0 otherwise.
+ */
+int read_integer(FILE *file, int *output)
+{
+    char buffer[100]; // Buffer to store the read value
+    if (fscanf(file, "%99s", buffer) != 1)
+    {
+        return 0; // Failed to read
+    }
+
+    char *endptr;
+    errno = 0;
+    long value = strtol(buffer, &endptr, 10);
+
+    // Check if the whole input is a number and within integer range
+    if (errno == ERANGE || value > REASONABLE_INPUT_MAX_NUMBER || value < REASONABLE_INPUT_MIN_NUMBER || *endptr != '\0')
+    {
+        return 0;
+    }
+
+    *output = (int)value;
+    return 1;
+}
+
+/**
  * Reads the configuration file and returns the hive configuration.
  *
  * The expected file format is:
@@ -334,6 +366,9 @@ typedef struct
  *  T is the interval for new bees to be created by the queen
  *  T_i is the time that the i-th bee spends in the hive
  *  X_i is the life span of the i-th bee in terms of times it leaves the hive
+ * 
+ * All the numbers should be in reasonable range.
+ * Reasonable means in range [1 30], inclusive, no matter the personal opinions.
  */
 hive_config read_config_file()
 {
@@ -344,21 +379,67 @@ hive_config read_config_file()
         exit(1);
     }
 
-    int new_bee_interval = 0;
-    int number_of_bees = 0;
-    fscanf(config_file, "%d %d %d", &number_of_bees, &max_bees_capacity, &new_bee_interval);
+    int new_bee_interval, number_of_bees, max_bees_capacity;
+
+    if (!read_integer(config_file, &number_of_bees) || number_of_bees <= 0)
+    {
+        fprintf(stderr, "Invalid number of bees (N)\n");
+        fclose(config_file);
+        exit(1);
+    }
+
+    if (!read_integer(config_file, &max_bees_capacity) || max_bees_capacity <= 0)
+    {
+        fprintf(stderr, "Invalid maximum hive capacity (P)\n");
+        fclose(config_file);
+        exit(1);
+    }
+
+    if (!read_integer(config_file, &new_bee_interval) || new_bee_interval < 0)
+    {
+        fprintf(stderr, "Invalid new bee interval (T)\n");
+        fclose(config_file);
+        exit(1);
+    }
+
+    if (number_of_bees < 2 * max_bees_capacity) {
+        fprintf(stderr, "Invalid number of bees and maximum hive capacity\n");
+        fclose(config_file);
+        exit(1);
+    }
 
     int *bee_time_in_hive = (int *)malloc(number_of_bees * sizeof(int));
     int *bee_life_spans = (int *)malloc(number_of_bees * sizeof(int));
 
-    for (int i = 0; i < number_of_bees; i++)
+    if (!bee_time_in_hive || !bee_life_spans)
     {
-        fscanf(config_file, "%d", &bee_time_in_hive[i]);
+        fprintf(stderr, "Memory allocation failed\n");
+        fclose(config_file);
+        exit(1);
     }
 
     for (int i = 0; i < number_of_bees; i++)
     {
-        fscanf(config_file, "%d", &bee_life_spans[i]);
+        if (!read_integer(config_file, &bee_time_in_hive[i]) || bee_time_in_hive[i] < 0)
+        {
+            fprintf(stderr, "Invalid time in hive (T_%d)\n", i + 1);
+            free(bee_time_in_hive);
+            free(bee_life_spans);
+            fclose(config_file);
+            exit(1);
+        }
+    }
+
+    for (int i = 0; i < number_of_bees; i++)
+    {
+        if (!read_integer(config_file, &bee_life_spans[i]) || bee_life_spans[i] < 0)
+        {
+            fprintf(stderr, "Invalid life span (X_%d)\n", i + 1);
+            free(bee_time_in_hive);
+            free(bee_life_spans);
+            fclose(config_file);
+            exit(1);
+        }
     }
 
     fclose(config_file);
@@ -368,6 +449,14 @@ hive_config read_config_file()
         .number_of_bees = number_of_bees,
         .new_bee_interval = new_bee_interval,
         .bees = (bee_config *)malloc(number_of_bees * sizeof(bee_config))};
+
+    if (!config.bees)
+    {
+        fprintf(stderr, "Memory allocation failed for bees\n");
+        free(bee_time_in_hive);
+        free(bee_life_spans);
+        exit(1);
+    }
 
     for (int i = 0; i < number_of_bees; i++)
     {
