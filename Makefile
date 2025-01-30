@@ -15,7 +15,7 @@ bin/lib_logger.o: bin src/logger/logger.c src/logger/logger.h bin/logger_interna
 bin/lib_hive_ipc.o: bin src/hive_ipc.c src/hive_ipc.h bin/lib_logger.o bin/logger_server
 	$(CC) $(CFLAGS) -c -o bin/lib_hive_ipc.o src/hive_ipc.c
 
-bin/hive: bin src/hive.c bin/lib_hive_ipc.o bin/lib_logger.o bin/logger_server bin/logger_internal.o
+bin/hive: bin src/hive.c bin/lib_hive_ipc.o bin/lib_logger.o bin/logger_server bin/logger_internal.o bin/queen
 	$(CC) $(CFLAGS) -o bin/hive src/hive.c bin/lib_hive_ipc.o bin/lib_logger.o bin/logger_internal.o
 
 bin/bee: bin src/bee.c bin/lib_hive_ipc.o bin/lib_logger.o bin/logger_internal.o

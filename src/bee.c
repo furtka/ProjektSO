@@ -13,16 +13,16 @@
 #include "logger/logger.h"
 
 #define handle_error(x)                                                               \
-    if (x == -1)                                                                      \
+    if (!sigint && x == -1)                                                                      \
     {                                                                                 \
         log(LOG_LEVEL_ERROR, log_tag, "ERROR %s at %s\n", strerror(errno), __func__); \
-        try_clean_and_exit_with_error();                                              \
+        if (!sigint) try_clean_and_exit_with_error();                                              \
     }
 
 void try_clean_and_exit_with_error();
 void try_clean_and_exit();
 
-volatile sig_atomic_t stop;
+volatile sig_atomic_t sigint;
 
 #define STATE_INSIDE 0
 #define STATE_OUTSIDE 1
@@ -81,9 +81,9 @@ void enter_hive()
     message.type = USED_GATE_TYPE;
     message.delta = 1;
     log(LOG_LEVEL_INFO, log_tag, "Sending message to gate %d", gate_id);
-    handle_error(msgsnd(message_queue[gate_id], &message, sizeof(int), 0));
+    handle_error(msgsnd(gate_message_queue[gate_id], &message, sizeof(int), 0));
     log(LOG_LEVEL_INFO, log_tag, "Waiting for ack from gate %d", gate_id);
-    handle_error(msgrcv(message_queue[gate_id], &message, sizeof(int), ACK_TYPE, 0));
+    handle_error(msgrcv(gate_message_queue[gate_id], &message, sizeof(int), ACK_TYPE, 0));
     log(LOG_LEVEL_INFO, log_tag, "Received ack from gate %d", gate_id);
     current_state = STATE_INSIDE;
 
@@ -101,9 +101,9 @@ void leave_hive()
     message.type = USED_GATE_TYPE;
     message.delta = -1;
     log(LOG_LEVEL_INFO, log_tag, "Sending message to gate %d", gate_id);
-    handle_error(msgsnd(message_queue[gate_id], &message, sizeof(int), 0));
+    handle_error(msgsnd(gate_message_queue[gate_id], &message, sizeof(int), 0));
     log(LOG_LEVEL_INFO, log_tag, "Waiting for ack from gate %d", gate_id);
-    handle_error(msgrcv(message_queue[gate_id], &message, sizeof(int), ACK_TYPE, 0));
+    handle_error(msgrcv(gate_message_queue[gate_id], &message, sizeof(int), ACK_TYPE, 0));
     log(LOG_LEVEL_INFO, log_tag, "Received ack from gate %d", gate_id);
     current_state = STATE_OUTSIDE;
     been_in_hive_counter++;
@@ -114,16 +114,16 @@ void leave_hive()
 
 void bee_lifecycle()
 {
-    if (current_state == STATE_OUTSIDE && !stop)
+    if (current_state == STATE_OUTSIDE && !sigint)
     {
         enter_hive();
     }
-    if (!stop) sleep(bee_time_in_hive);
-    if (current_state == STATE_INSIDE && !stop)
+    if (!sigint) sleep(bee_time_in_hive);
+    if (current_state == STATE_INSIDE && !sigint)
     {
         leave_hive();
     }
-    if (!stop) sleep(bee_time_outside_hive);
+    if (!sigint) sleep(bee_time_outside_hive);
 }
 
 void cleanup_resources()
@@ -148,7 +148,7 @@ void try_clean_and_exit()
 
 void handle_sigint(int singal)
 {
-    stop = 1;
+    sigint = 1;
 }
 
 int main(int argc, char *argv[])
@@ -160,13 +160,13 @@ int main(int argc, char *argv[])
     handle_error(open_semaphores(1));
     for (
         been_in_hive_counter = 0;
-        been_in_hive_counter < life_span && !stop;
+        been_in_hive_counter < life_span && !sigint;
         been_in_hive_counter++)
     {
         bee_lifecycle();
     }
 
-    if (stop)
+    if (sigint)
     {
         log(LOG_LEVEL_INFO, log_tag, "Exiting bee due to SIGINT");
     }

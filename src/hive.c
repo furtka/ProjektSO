@@ -16,13 +16,26 @@
 
 #define log_tag "HIVE"
 
+#define max(a, b) a > b ? a : b;
+
+/**
+ * Represents the configuration of a bee.
+ */
+typedef struct
+{
+    int id;
+    int time_in_hive;
+    int life_span;
+    int starts_in_hive;
+} bee_config;
+
 int child_pid_group = -1;
 
 #define handle_error(x)                                                                               \
-    if (x == -1)                                                                                       \
+    if (!sigint && x == -1)                                                                                      \
     {                                                                                                 \
         log(LOG_LEVEL_ERROR, log_tag, "ERROR %s at %s at %d\n", strerror(errno), __func__, __LINE__); \
-        try_clean_and_exit_with_error();                                                              \
+        if (!sigint) try_clean_and_exit_with_error();                                                              \
     }
 
 volatile sig_atomic_t sigint = 0;
@@ -30,17 +43,20 @@ volatile sig_atomic_t sigint = 0;
 int max_bees_capacity;
 char *bees_config_filepath;
 char *logs_directory;
+int next_bee_id = 0;
 
 void try_clean_and_exit_with_error();
 void try_clean_and_exit();
 void cleanup_resources();
 void initialize_gate_threads();
+void launch_bee_process(bee_config bee);
 
 pthread_mutex_t bees_inside_counter_mutex = PTHREAD_MUTEX_INITIALIZER;
 int bees_inside_counter = 0;
 
 pthread_t gate_threads[GATES_NUMBER];
 pthread_t zombie_collector_thread;
+pthread_t queen_thread;
 
 int wait_for_child()
 {
@@ -55,7 +71,8 @@ int wait_for_child()
         else
         {
             log(LOG_LEVEL_ERROR, log_tag, "ERROR %s at %s\n", strerror(errno), __func__);
-            if (!sigint) {
+            if (!sigint)
+            {
                 try_clean_and_exit_with_error();
             }
             return 1;
@@ -92,7 +109,7 @@ void *gate_thread_function(void *arg)
     while (!sigint)
     {
         gate_message message;
-        handle_error(msgrcv(message_queue[gate_id], &message, sizeof(int), USED_GATE_TYPE, 0));
+        handle_error(msgrcv(gate_message_queue[gate_id], &message, sizeof(int), USED_GATE_TYPE, 0));
         log(LOG_LEVEL_DEBUG, log_tag, "Gate %d: Received message", gate_id);
         pthread_mutex_lock(&bees_inside_counter_mutex);
         bees_inside_counter += message.delta;
@@ -100,7 +117,30 @@ void *gate_thread_function(void *arg)
         pthread_mutex_unlock(&bees_inside_counter_mutex);
         message.type = ACK_TYPE;
         log(LOG_LEVEL_DEBUG, log_tag, "Gate %d: Acknowledging", gate_id);
-        handle_error(msgsnd(message_queue[gate_id], &message, sizeof(int), 0));
+        handle_error(msgsnd(gate_message_queue[gate_id], &message, sizeof(int), 0));
+    }
+    return NULL;
+}
+
+void *queen_thread_function(void *arg)
+{
+    while (!sigint)
+    {
+        queen_message message;
+        log(LOG_LEVEL_INFO, log_tag, "Awaiting message from queen");
+        if (!sigint)
+            handle_error(msgrcv(queen_message_queue, &message, sizeof(int), GIVE_BIRTH, 0));
+        log(LOG_LEVEL_INFO, log_tag, "Recieved message from queen, creating new bee");
+
+        if (!sigint)
+        {
+            launch_bee_process(
+                (bee_config){
+                    .id = next_bee_id++,
+                    .time_in_hive = rand() % 10 + 2,
+                    .life_span = rand() % 10 + 2,
+                    .starts_in_hive = 1});
+        }
     }
     return NULL;
 }
@@ -132,6 +172,11 @@ void initialize_gate_threads()
     }
 }
 
+void initialize_queen_thread()
+{
+    pthread_create(&queen_thread, NULL, queen_thread_function, NULL);
+}
+
 void parse_command_line_arguments(int argc, char *argv[])
 {
     if (argc != 2)
@@ -141,16 +186,6 @@ void parse_command_line_arguments(int argc, char *argv[])
     }
     bees_config_filepath = argv[1];
 }
-
-/**
- * Represents the configuration of a bee.
- */
-typedef struct
-{
-    int id;
-    int time_in_hive;
-    int life_span;
-} bee_config;
 
 /**
  * Represents the configuration of the hive, including the bees and queen.
@@ -311,11 +346,14 @@ hive_config read_config_file()
         config.bees[i].id = i;
         config.bees[i].time_in_hive = bee_time_in_hive[i];
         config.bees[i].life_span = bee_life_spans[i];
+        config.bees[i].starts_in_hive = rand() % 2;
+
+        next_bee_id = max(next_bee_id, i);
     }
 
     free(bee_time_in_hive);
     free(bee_life_spans);
-
+    next_bee_id++;
     return config;
 }
 
@@ -353,6 +391,33 @@ void launch_bee_process(bee_config bee)
     }
 }
 
+void launch_queen_process(int new_bee_interval)
+{
+    char *interval;
+    pid_t pid = fork();
+    switch (pid)
+    {
+    case -1:
+        log(LOG_LEVEL_ERROR, log_tag, "Error launching queen process, exiting...");
+        try_clean_and_exit_with_error();
+        break;
+    case 0:
+        interval = (char *)malloc(10);
+        sprintf(interval, "%d", new_bee_interval);
+        execl("./bin/queen", "./bin/queen", interval, NULL);
+        log(LOG_LEVEL_ERROR, "HIVE", "Error launching queen process, exiting...");
+        try_clean_and_exit_with_error();
+        break;
+    default:
+        if (child_pid_group == -1)
+        {
+            child_pid_group = pid;
+        }
+        setpgid(pid, child_pid_group);
+        break;
+    }
+}
+
 /**
  * Launches the bee processes and returns the pids of the processes.
  *
@@ -368,12 +433,14 @@ void launch_bee_processes(hive_config config)
 
 void cleanup_resources()
 {
+    printf("cleanup resources called\n");
     kill(-child_pid_group, SIGINT);
     sigint = 1;
     while (wait_for_child() == 0)
         ;
 
     close_gate_message_queue();
+    close_queen_message_queue();
     close_semaphores();
     unlink_semaphores();
     close_logger();
@@ -399,9 +466,12 @@ int main(int argc, char *argv[])
     parse_command_line_arguments(argc, argv);
     hive_config config = read_config_file();
     handle_error(initialize_gate_message_queue());
+    handle_error(initialize_queen_message_queue());
     handle_error(open_semaphores(config.max_bees_capacity));
     launch_bee_processes(config);
+    launch_queen_process(config.new_bee_interval);
 
+    initialize_queen_thread();
     initialize_zombie_collector_thread();
     initialize_gate_threads();
 
