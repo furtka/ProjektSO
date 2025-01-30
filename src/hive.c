@@ -58,6 +58,10 @@ pthread_t gate_threads[GATES_NUMBER];
 pthread_t zombie_collector_thread;
 pthread_t queen_thread;
 
+/**
+ * @return int - 0 - success, 1 no child to wait for or error but received
+ *         SIGINT earlier
+ */
 int wait_for_child()
 {
     printf("Waiting for child\n");
@@ -90,6 +94,14 @@ int wait_for_child()
     return 0;
 }
 
+/**
+ * Thread function for the zombie collector threads.
+ * 
+ * Waits for child processes to finish and collects them.
+ * 
+ * @param arg - not used
+ * @return void* - NULL
+ */
 void *zombie_collector_thread_function(void *arg)
 {
     while (!sigint)
@@ -102,6 +114,9 @@ void *zombie_collector_thread_function(void *arg)
     return NULL;
 }
 
+/**
+ * Thread function for the gate operations.
+ */
 void *gate_thread_function(void *arg)
 {
     int gate_id = *((int *)arg);
@@ -122,6 +137,9 @@ void *gate_thread_function(void *arg)
     return NULL;
 }
 
+/**
+ * Thread used for communication with the queen.
+ */
 void *queen_thread_function(void *arg)
 {
     while (!sigint)
@@ -157,11 +175,17 @@ void handle_sigint(int singal)
     sigint = 1;
 }
 
+/**
+ * Initializes the zombie collector thread.
+ */
 void initialize_zombie_collector_thread()
 {
     pthread_create(&zombie_collector_thread, NULL, zombie_collector_thread_function, NULL);
 }
 
+/*
+ * Initializes the gate threads.
+ */
 void initialize_gate_threads()
 {
     for (int i = 0; i < GATES_NUMBER; i++)
@@ -172,11 +196,17 @@ void initialize_gate_threads()
     }
 }
 
+/**
+ * Initializes the queen thread.
+ */
 void initialize_queen_thread()
 {
     pthread_create(&queen_thread, NULL, queen_thread_function, NULL);
 }
 
+/**
+ * Parses the command line arguments. Expects the path to the bees config file.
+ */
 void parse_command_line_arguments(int argc, char *argv[])
 {
     if (argc != 2)
@@ -189,7 +219,7 @@ void parse_command_line_arguments(int argc, char *argv[])
 
 /**
  * Represents the configuration of the hive, including the bees and queen.
- *
+ * The format is described in read_config_file
  */
 typedef struct
 {
@@ -346,7 +376,7 @@ hive_config read_config_file()
         config.bees[i].id = i;
         config.bees[i].time_in_hive = bee_time_in_hive[i];
         config.bees[i].life_span = bee_life_spans[i];
-        config.bees[i].starts_in_hive = rand() % 2;
+        config.bees[i].starts_in_hive = 0;
 
         next_bee_id = max(next_bee_id, i);
     }
@@ -357,6 +387,10 @@ hive_config read_config_file()
     return config;
 }
 
+/**
+ * Launches new bee process and assings it to the child_pid_group that is later
+ * used to propagate the SIGINT signal to all child processes.
+ */
 void launch_bee_process(bee_config bee)
 {
     char *id;
@@ -391,6 +425,10 @@ void launch_bee_process(bee_config bee)
     }
 }
 
+/**
+ * Launches the queen process and assigns it to the child_pid_group that is later
+ * used to propagate the SIGINT signal to all child processes.
+ */
 void launch_queen_process(int new_bee_interval)
 {
     char *interval;
@@ -431,6 +469,11 @@ void launch_bee_processes(hive_config config)
     }
 }
 
+/**
+ * Propagates the SIGINT signal to all child processes.
+ * Waits for the child processes to finish.
+ * Cleans up the resources and exits the program.
+ */
 void cleanup_resources()
 {
     printf("cleanup resources called\n");
@@ -446,12 +489,18 @@ void cleanup_resources()
     close_logger();
 }
 
+/**
+ * Finish the program with an error code.
+ */
 void try_clean_and_exit_with_error()
 {
     cleanup_resources();
     exit(1);
 }
 
+/**
+ * Finish the program with a success code.
+ */
 void try_clean_and_exit()
 {
     cleanup_resources();
